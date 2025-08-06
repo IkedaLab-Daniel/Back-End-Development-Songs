@@ -51,3 +51,107 @@ def parse_json(data):
 ######################################################################
 # INSERT CODE HERE
 ######################################################################
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "OK"})
+
+@app.route("/count")
+def count():
+    """return length of data"""
+    if songs_list:
+        return jsonify(length=len(songs_list)), 200
+
+    return {"message": "Internal server error"}, 500
+
+@app.route("/song", methods=["GET"])
+def songs():
+    """return all songs from the database"""
+    try:
+        # Get all documents from the songs collection
+        songs_cursor = db.songs.find({})
+        # Convert cursor to list and parse JSON
+        songs_list = parse_json(list(songs_cursor))
+        # Return in the required format
+        return jsonify({"songs": songs_list}), 200
+    except Exception as e:
+        return {"message": f"Error retrieving songs: {str(e)}"}, 500
+
+@app.route("/song/<int:id>", methods=["GET"])
+def get_song_by_id(id):
+    """return a song by id"""
+    try:
+        # Find the song by id in the database
+        song = db.songs.find_one({"id": id})
+        
+        if song:
+            # Parse and return the song
+            parsed_song = parse_json(song)
+            return jsonify(parsed_song), 200
+        else:
+            # Song not found
+            return {"message": "song with id not found"}, 404
+    except Exception as e:
+        return {"message": f"Error retrieving song: {str(e)}"}, 500
+
+@app.route("/song", methods=["POST"])
+def create_song():
+    """create a new song"""
+    try:
+        # Extract song data from request body
+        song = request.get_json()
+        
+        # Check if song with the same id already exists
+        existing_song = db.songs.find_one({"id": song["id"]})
+        if existing_song:
+            return {"Message": f"song with id {song['id']} already present"}, 302
+        
+        # Insert the new song into the database
+        db.songs.insert_one(song)
+        
+        # Parse and return the created song
+        parsed_song = parse_json(song)
+        return jsonify(parsed_song), 201
+    except Exception as e:
+        return {"message": f"Error creating song: {str(e)}"}, 500
+
+@app.route("/song/<int:id>", methods=["PUT"])
+def update_song(id):
+    """update a song by id"""
+    try:
+        # Extract song data from request body
+        song_data = request.get_json()
+        
+        # Find the song in the database
+        existing_song = db.songs.find_one({"id": id})
+        
+        if existing_song:
+            # Update the song with the incoming request data
+            db.songs.update_one({"id": id}, {"$set": song_data})
+            
+            # Get the updated song and return it
+            updated_song = db.songs.find_one({"id": id})
+            parsed_song = parse_json(updated_song)
+            return jsonify(parsed_song), 200
+        else:
+            # Song not found
+            return {"message": "song not found"}, 404
+    except Exception as e:
+        return {"message": f"Error updating song: {str(e)}"}, 500
+
+@app.route("/song/<int:id>", methods=["DELETE"])
+def delete_song(id):
+    """delete a song by id"""
+    try:
+        # Delete the song from the database
+        result = db.songs.delete_one({"id": id})
+        
+        # Check the deleted_count attribute
+        if result.deleted_count == 0:
+            # Song not found
+            return {"message": "song not found"}, 404
+        elif result.deleted_count == 1:
+            # Song successfully deleted - return empty body with 204 status
+            return "", 204
+    except Exception as e:
+        return {"message": f"Error deleting song: {str(e)}"}, 500
